@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سامانه پیشرفته پایش، اندازه‌گیری و مدیریت تجهیزات</title>
+    
+    <!-- CSS نقشه Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- CSS آیکون‌های FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+    <style>
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Tahoma, Arial, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+        #map {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        #map.measuring-mode {
+            cursor: crosshair !important;
+        }
+
+        .leaflet-control-layers {
+            font-family: Tahoma, Arial, sans-serif;
+            font-size: 12px;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+            direction: rtl;
+            text-align: right;
+        }
+
+        /* نوار ابزار معلق بالا */
+        #top-toolbar {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            max-width: calc(100vw - 30px);
+            box-sizing: border-box;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(5px);
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 6px 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+            z-index: 1001;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .tool-btn {
+            background: #f1f5f9;
+            color: #334155;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-family: Tahoma;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s;
+        }
+        .tool-btn:hover { background: #0077b6; color: white; border-color: #0077b6; }
+        .tool-btn.primary { background: #0077b6; color: white; border-color: #0077b6; }
+        .tool-btn.primary:hover { background: #03045e; }
+        .tool-btn.active { background: #ffb703; color: #000; border-color: #d97706; box-shadow: 0 0 8px rgba(255, 183, 3, 0.8); }
+        .tool-btn.drag-active { background: #8b5cf6; color: white; border-color: #7c3aed; box-shadow: 0 0 8px rgba(139, 92, 246, 0.8); }
+        .tool-btn.success { background: #10b981; color: white; border-color: #059669; }
+        .tool-btn.success:hover { background: #059669; }
+        .tool-divider { width: 1px; height: 24px; background: #cbd5e1; margin: 0 2px; }
+
+        /* HUD مختصات ماوس (پایین سمت چپ) */
+        #mouse-coords-hud {
+            position: absolute;
+            bottom: 10px;
+            left: 50px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(4px);
+            border: 1px solid #00b4d8;
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 6px 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 1000;
+            font-size: 11px;
+            font-family: monospace, Tahoma;
+            direction: ltr;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* HUD اطلاعات اندازه‌گیری (پایین سمت راست) */
+        #measure-hud {
+            position: absolute;
+            bottom: 25px;
+            right: 25px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(5px);
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 10px 14px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+            font-size: 11px;
+            color: #1e293b;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 200px;
+            direction: rtl;
+        }
+        #measure-hud b { color: #0077b6; }
+
+        /* سایدبار مدیریت */
+        #sidebar {
+            position: absolute;
+            top: 75px;
+            right: 25px;
+            width: 370px;
+            height: auto;
+            max-height: 80vh;
+            min-width: 260px;
+            background: rgba(248, 249, 250, 0.95);
+            backdrop-filter: blur(5px);
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            resize: both;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #sidebar.minimized {
+            width: 44px !important;
+            height: 44px !important;
+            min-width: 44px !important;
+            min-height: 44px !important;
+            top: 15px !important;
+            right: 15px !important;
+            left: auto !important;
+            border-radius: 50% !important;
+            resize: none !important;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+            padding: 0 !important;
+        }
+
+        .sidebar-header {
+            background: #0077b6;
+            color: white;
+            padding: 10px 15px;
+            cursor: move;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            flex-shrink: 0;
+            height: 44px;
+            box-sizing: border-box;
+        }
+        .sidebar-header h3 { margin: 0; font-size: 13px; white-space: nowrap; }
+        .window-btn {
+            background: none; border: none; color: white; font-size: 14px; cursor: pointer;
+            padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: background 0.2s;
+        }
+        .window-btn:hover { background: rgba(255, 255, 255, 0.2); }
+
+        #sidebar.minimized .sidebar-header { padding: 0; justify-content: center; border-radius: 50%; height: 100%; }
+        #sidebar.minimized .sidebar-header h3 { display: none; }
+
+        .sidebar-content {
+            padding: 10px;
+            overflow-y: auto;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        #sidebar.minimized .sidebar-content { display: none !important; }
+
+        .accordion-box {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .accordion-header {
+            background: #f1f5f9;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: bold;
+            color: #0077b6;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            transition: background 0.2s;
+        }
+        .accordion-header:hover { background: #e2e8f0; }
+        .accordion-header i.fa-chevron-down { transition: transform 0.3s ease; font-size: 10px; }
+        .accordion-box.collapsed .accordion-header i.fa-chevron-down { transform: rotate(-90deg); }
+        .accordion-body {
+            padding: 10px; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #e2e8f0;
+        }
+        .accordion-box.collapsed .accordion-body { display: none; }
+
+        .form-group { display: flex; flex-direction: column; gap: 3px; }
+        .form-group label { font-size: 11px; font-weight: bold; color: #333; }
+        .form-group input, .form-group select {
+            padding: 6px; border: 1px solid #ccc; border-radius: 6px; font-family: Tahoma; font-size: 12px; background: white;
+        }
+
+        .filter-checkboxes {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 4px; max-height: 100px; overflow-y: auto;
+            background: #f1f5f9; padding: 6px; border-radius: 6px; font-size: 11px;
+        }
+        .filter-checkboxes label { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+        .filter-actions { display: flex; gap: 5px; }
+        .filter-actions button { flex: 1; padding: 5px; font-size: 10px; background-color: #64748b; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .filter-actions button:hover { background-color: #475569; }
+        .filter-actions button.danger-filter-btn { background-color: #e63946; }
+        .filter-actions button.danger-filter-btn:hover { background-color: #d90429; }
+
+        #entity-list { display: flex; flex-direction: column; gap: 5px; max-height: 180px; overflow-y: auto; }
+        .entity-item {
+            display: flex; justify-content: space-between; align-items: center; background: white;
+            padding: 5px 8px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px;
+        }
+        .item-actions { display: flex; gap: 4px; }
+        .edit-btn { background-color: #f59e0b; color: white; border: none; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 10px; }
+        .edit-btn:hover { background-color: #d97706; }
+        .delete-btn { background-color: #e63946; color: white; border: none; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 10px; }
+        .delete-btn:hover { background-color: #d90429; }
+
+        /* مودال افزودن / ویرایش */
+        #modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(3px);
+            z-index: 2000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+        #entity-modal {
+            background: white;
+            width: 350px;
+            border-radius: 12px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: modalPop 0.25s ease;
+        }
+        @keyframes modalPop {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .modal-header {
+            background: #0077b6;
+            color: white;
+            padding: 12px 15px;
+            font-weight: bold;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-body {
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .modal-footer {
+            padding: 10px 15px;
+            background: #f8f9fa;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+        .modal-btn {
+            padding: 7px 14px; border-radius: 6px; font-family: Tahoma; font-size: 12px; font-weight: bold; cursor: pointer; border: none;
+        }
+        .btn-confirm { background: #0077b6; color: white; }
+        .btn-confirm:hover { background: #03045e; }
+        .btn-cancel { background: #64748b; color: white; }
+        .btn-cancel:hover { background: #475569; }
+
+        .id-badge {
+            background: #e2e8f0; color: #0f172a; padding: 4px 8px; border-radius: 6px;
+            font-family: monospace; font-weight: bold; font-size: 12px; display: inline-block; width: fit-content;
+        }
+
+        /* استایل مارکرها */
+        .custom-marker {
+            color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center;
+            border: 2px solid #ffffff; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            cursor: pointer;
+        }
+        .custom-marker i { font-size: 17px; }
+
+        .bg-ship { background: linear-gradient(135deg, #0077b6, #00b4d8); }
+        .bg-plane { background: linear-gradient(135deg, #48cae4, #0077b6); }
+        .bg-fighter { background: linear-gradient(135deg, #d62828, #f77f00); }
+        .bg-awacs { background: linear-gradient(135deg, #7209b7, #3f37c9); }
+        .bg-boat { background: linear-gradient(135deg, #00b4d8, #90e0ef); color: #000 !important; }
+        .bg-radar { background: linear-gradient(135deg, #38b000, #70e000); }
+        .bg-train { background: linear-gradient(135deg, #6c757d, #343a40); }
+        .bg-car { background: linear-gradient(135deg, #f72585, #b5179e); }
+        .bg-truck { background: linear-gradient(135deg, #fb8500, #ffb703); }
+        .bg-weather { background: linear-gradient(135deg, #4cc9f0, #4895ef); }
+        .bg-house { background: linear-gradient(135deg, #2a9d8f, #264653); }
+        .bg-default { background: linear-gradient(135deg, #e63946, #d62828); }
+
+        .marker-label {
+            background: rgba(15, 23, 42, 0.9); border: 1px solid #00b4d8; color: #ffffff;
+            font-size: 11px; font-weight: bold; padding: 2px 6px; border-radius: 4px; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .leaflet-tooltip.marker-label::before { display: none; }
+
+        .measure-label {
+            background: #ffb703; color: #000; font-weight: bold; font-size: 10px;
+            padding: 2px 5px; border-radius: 4px; border: 1px solid #000; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        }
+        .leaflet-tooltip.measure-label::before { display: none; }
+    
+
+        /* چیدمان واکنش‌گرا برای نمایشگرهای کوچک */
+        @media (max-width: 700px) {
+            #top-toolbar {
+                top: 8px;
+                gap: 5px;
+                padding: 6px;
+                max-height: 30vh;
+                overflow-y: auto;
+            }
+            .tool-btn {
+                padding: 6px 8px;
+                font-size: 10px;
+            }
+            #sidebar {
+                top: 75px;
+                right: 8px;
+                width: min(370px, calc(100vw - 16px));
+                max-height: 62vh;
+            }
+            #measure-hud {
+                right: 8px;
+                bottom: 8px;
+                min-width: 155px;
+                max-width: calc(100vw - 185px);
+                padding: 8px;
+                font-size: 10px;
+            }
+            #mouse-coords-hud {
+                left: 8px;
+                bottom: 8px;
+                padding: 6px;
+                gap: 6px;
+                font-size: 9px;
+            }
+            #entity-modal {
+                width: min(350px, calc(100vw - 30px));
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <!-- نوار ابزار بالا -->
+    <div id="top-toolbar">
+        <button type="button" class="tool-btn primary" onclick="startAddNewEntity()">
+            <i class="fa-solid fa-plus"></i> افزودن تجهیز
+        </button>
+        
+        <!-- دکمه سوییچ جابه‌جایی آیکون‌ها -->
+        <button type="button" id="toggleDragBtn" class="tool-btn" onclick="toggleDragMode()">
+            <i class="fa-solid fa-hand"></i> جابه‌جایی آیکون‌ها
+        </button>
+
+        <div class="tool-divider"></div>
+
+        <button type="button" id="toggleMeasureBtn" class="tool-btn" onclick="toggleMeasureMode()">
+            <i class="fa-solid fa-ruler"></i> اندازه‌گیری
+        </button>
+        <button type="button" class="tool-btn success" onclick="forceClosePolygon()">
+            <i class="fa-solid fa-draw-polygon"></i> بستن مساحت
+        </button>
+        <button type="button" class="tool-btn" onclick="clearMeasurements()">
+            <i class="fa-solid fa-trash-can"></i> پاک‌سازی خطوط
+        </button>
+        
+        <div class="tool-divider"></div>
+
+        <button type="button" class="tool-btn" onclick="saveToLocalStorage()">
+            <i class="fa-solid fa-floppy-disk"></i> ذخیره
+        </button>
+        <button type="button" class="tool-btn" onclick="exportJSON()">
+            <i class="fa-solid fa-download"></i> دانلود JSON
+        </button>
+        <label class="tool-btn" style="margin: 0; cursor: pointer;">
+            <i class="fa-solid fa-upload"></i> بارگذاری JSON
+            <input type="file" id="importFileInput" accept=".json" onchange="importJSON(event)" style="display: none;">
+        </label>
+
+        <div class="tool-divider"></div>
+
+        <button type="button" class="tool-btn" onclick="toggleMinimize()">
+            <i class="fa-solid fa-sliders"></i> پنل مدیریت
+        </button>
+    </div>
+
+    <!-- HUD مختصات ماوس -->
+    <div id="mouse-coords-hud">
+        <span><b>LAT:</b> <span id="mouse-lat">0.0000</span></span>
+        <span><b>LNG:</b> <span id="mouse-lng">0.0000</span></span>
+    </div>
+
+    <!-- HUD اندازه‌گیری -->
+    <div id="measure-hud">
+        <div><b>وضعیت:</b> <span id="measureStatusText">غیرفعال</span></div>
+        <div><b>مجموع مسافت:</b> <span id="totalDistanceVal">۰ متر</span></div>
+        <div><b>مساحت شکل:</b> <span id="totalAreaVal">۰ متر مربع</span></div>
+    </div>
+
+    <!-- مودال افزودن / ویرایش تجهیزات -->
+    <div id="modal-overlay">
+        <div id="entity-modal">
+            <div class="modal-header">
+                <span id="modalTitle">➕ افزودن تجهیز جدید</span>
+                <button class="window-btn" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>شناسه سیستمی (خودکار):</label>
+                    <div id="modalEntityIdDisplay" class="id-badge">ID1</div>
+                </div>
+                <div class="form-group">
+                    <label>نوع نماد:</label>
+                    <select id="modalEntityType">
+                        <option value="ship">🚢 کشتی</option>
+                        <option value="plane">✈️ هواپیما</option>
+                        <option value="fighter">✈️ جنگنده</option>
+                        <option value="awacs">📡 آواکس</option>
+                        <option value="boat">🚤 قایق</option>
+                        <option value="radar">📻 رادار</option>
+                        <option value="train">🚂 قطار</option>
+                        <option value="car">🚗 ماشین</option>
+                        <option value="truck">🚛 کامیون</option>
+                        <option value="weather">🌤️ ایستگاه هواشناسی</option>
+                        <option value="house">🏠 خانه</option>
+                        <option value="default">📍 مارکر معمولی</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>عنوان / لیبل:</label>
+                    <input type="text" id="modalEntityLabel" placeholder="مثلا: هدف متحرک">
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Lat (عرض جغرافیایی):</label>
+                        <input type="text" id="modalEntityLat">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Lng (طول جغرافیایی):</label>
+                        <input type="text" id="modalEntityLng">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="modal-btn btn-cancel" onclick="closeModal()">انصراف</button>
+                <button type="button" class="modal-btn btn-confirm" onclick="confirmSaveEntity()">ذخیره تغییرات</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- سایدبار مدیریت -->
+    <div id="sidebar">
+        <div class="sidebar-header" id="sidebarHeader">
+            <span><i class="fa-solid fa-bars"></i> فیلتر و لیست تجهیزات</span>
+            <button class="window-btn" id="toggleWindowBtn" onclick="toggleMinimize()" title="جمع/باز کردن">
+                <i class="fa-solid fa-minus"></i>
+            </button>
+        </div>
+
+        <div class="sidebar-content" id="sidebarContent">
+            
+            <!-- فیلترها -->
+            <div class="accordion-box">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <span>🔍 فیلتر نمایش روی نقشه</span>
+                    <i class="fa-solid fa-chevron-down"></i>
+                </div>
+                <div class="accordion-body">
+                    <div class="form-group">
+                        <label>جستجو بر اساس نام یا شناسه:</label>
+                        <input type="text" id="filterText" placeholder="بخشی از متن را تایپ کنید..." oninput="applyFilters()">
+                    </div>
+                    <div class="form-group">
+                        <label>انتخاب نوع (چندتایی):</label>
+                        <div class="filter-checkboxes" id="typeCheckboxes"></div>
+                        <div class="filter-actions">
+                            <button type="button" onclick="toggleAllTypes(true)">همه</button>
+                            <button type="button" onclick="toggleAllTypes(false)">هیچ‌کدام</button>
+                            <!-- 🌟 دکمه پاک‌سازی بر اساس فیلتر فعال -->
+                            <button type="button" class="danger-filter-btn" onclick="clearFilteredEntities()" title="پاک کردن تمام آیتم‌هایی که با فیلترهای فعلی نمایش داده شده‌اند">🗑️ پاک فیلترشده‌ها</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- لیست آیتم‌ها -->
+            <div class="accordion-box">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <span>📋 لیست آیتم‌های ثبت‌شده</span>
+                    <i class="fa-solid fa-chevron-down"></i>
+                </div>
+                <div class="accordion-body">
+                    <div id="entity-list"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        const map = L.map('map', { zoomControl: false }).setView([26.5, 55.5], 7);
+        L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+        const googleSat = L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 19, attribution: '© Google Satellite', subdomains: ['0', '1', '2', '3'] });
+        const googleStreets = L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 19, attribution: '© Google Maps', subdomains: ['0', '1', '2', '3'] });
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+        const cartoVoyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '© CARTO Voyager', subdomains: 'abcd' });
+        const cartoDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '© CARTO Dark Matter', subdomains: 'abcd' });
+
+        googleSat.addTo(map);
+        L.control.layers({
+            "🛰️ گوگل ماهواره‌ای": googleSat,
+            "🗺️ گوگل خیابانی": googleStreets/*,
+            "🌐 OpenStreetMap": osm,
+            "🎨 کارتو روشنایی": cartoVoyager,
+            "🌙 کارتو تاریک": cartoDark*/
+        }, null, { position: 'topleft', collapsed: true }).addTo(map);
+
+        function toggleAccordion(header) { header.parentElement.classList.toggle('collapsed'); }
+
+        // نمایش آنلاین مختصات ماوس
+        const mouseLatElem = document.getElementById('mouse-lat');
+        const mouseLngElem = document.getElementById('mouse-lng');
+        map.on('mousemove', function(e) {
+            mouseLatElem.innerText = e.latlng.lat.toFixed(5);
+            mouseLngElem.innerText = e.latlng.lng.toFixed(5);
+        });
+
+        // مدیریت سایدبار
+        const sidebar = document.getElementById("sidebar");
+        const sidebarHeader = document.getElementById("sidebarHeader");
+        const toggleBtnIcon = document.getElementById("toggleWindowBtn");
+        let isDraggingSidebar = false, offsetX = 0, offsetY = 0;
+        let lastState = { top: "75px", left: "auto", right: "25px", width: "370px", height: "auto" };
+
+        function toggleMinimize() {
+            if (sidebar.classList.contains("minimized")) {
+                sidebar.classList.remove("minimized");
+                sidebar.style.top = lastState.top; sidebar.style.left = lastState.left;
+                sidebar.style.right = lastState.right; sidebar.style.width = lastState.width; sidebar.style.height = lastState.height;
+                toggleBtnIcon.innerHTML = '<i class="fa-solid fa-minus"></i>';
+            } else {
+                const rect = sidebar.getBoundingClientRect();
+                lastState = { top: rect.top + "px", left: rect.left + "px", right: "auto", width: sidebar.style.width || "370px", height: sidebar.style.height || "auto" };
+                sidebar.classList.add("minimized");
+                toggleBtnIcon.innerHTML = '<i class="fa-solid fa-sliders"></i>';
+            }
+        }
+
+        sidebarHeader.addEventListener("mousedown", (e) => {
+            if (sidebar.classList.contains("minimized")) { toggleMinimize(); return; }
+            if (e.target.closest(".window-btn")) return;
+            isDraggingSidebar = true;
+            offsetX = e.clientX - sidebar.getBoundingClientRect().left;
+            offsetY = e.clientY - sidebar.getBoundingClientRect().top;
+            document.addEventListener("mousemove", onMouseMoveSidebar);
+            document.addEventListener("mouseup", onMouseUpSidebar);
+        });
+
+        function onMouseMoveSidebar(e) {
+            if (!isDraggingSidebar) return;
+            let x = e.clientX - offsetX, y = e.clientY - offsetY;
+            x = Math.max(0, Math.min(x, window.innerWidth - sidebar.offsetWidth));
+            y = Math.max(0, Math.min(y, window.innerHeight - sidebar.offsetHeight));
+            sidebar.style.left = x + "px"; sidebar.style.top = y + "px"; sidebar.style.right = "auto";
+        }
+        function onMouseUpSidebar() { isDraggingSidebar = false; document.removeEventListener("mousemove", onMouseMoveSidebar); document.removeEventListener("mouseup", onMouseUpSidebar); }
+
+        /* ================= جابه‌جایی آیکون‌ها ================= */
+        let isDragEnabled = false;
+        const toggleDragBtn = document.getElementById('toggleDragBtn');
+
+        function toggleDragMode() {
+            isDragEnabled = !isDragEnabled;
+            if (isDragEnabled) {
+                toggleDragBtn.classList.add('drag-active');
+                toggleDragBtn.innerHTML = '<i class="fa-solid fa-hand-back-fist"></i> قفل جابه‌جایی';
+            } else {
+                toggleDragBtn.classList.remove('drag-active');
+                toggleDragBtn.innerHTML = '<i class="fa-solid fa-hand"></i> جابه‌جایی آیکون‌ها';
+            }
+
+            registry.forEach(item => {
+                if (item.marker && item.marker.dragging) {
+                    if (isDragEnabled) {
+                        item.marker.dragging.enable();
+                    } else {
+                        item.marker.dragging.disable();
+                    }
+                }
+            });
+        }
+
+        /* ================= تولید شناسه خودکار ================= */
+        function generateAutoId() {
+            let maxNum = 0;
+            registry.forEach(item => {
+                if (item.id && item.id.startsWith("ID")) {
+                    const num = parseInt(item.id.replace("ID", ""), 10);
+                    if (!isNaN(num) && num > maxNum) {
+                        maxNum = num;
+                    }
+                }
+            });
+            return "ID" + (maxNum + 1);
+        }
+
+        /* ================= مودال مدیریت تجهیزات ================= */
+        const modalOverlay = document.getElementById('modal-overlay');
+        let editingIndex = null;
+        let activeModalId = "";
+
+        function startAddNewEntity() {
+            editingIndex = null;
+            activeModalId = generateAutoId();
+            document.getElementById('modalTitle').innerHTML = '➕ افزودن تجهیز جدید';
+            document.getElementById('modalEntityIdDisplay').innerText = activeModalId;
+            document.getElementById('modalEntityLabel').value = "هدف " + activeModalId.replace("ID", "");
+            
+            const center = map.getCenter();
+            document.getElementById('modalEntityLat').value = center.lat.toFixed(4);
+            document.getElementById('modalEntityLng').value = center.lng.toFixed(4);
+
+            modalOverlay.style.display = 'flex';
+        }
+
+        function openModalForClick(lat, lng) {
+            editingIndex = null;
+            activeModalId = generateAutoId();
+            document.getElementById('modalTitle').innerHTML = '➕ ثبت تجهیز در نقطه کلیک شده';
+            document.getElementById('modalEntityIdDisplay').innerText = activeModalId;
+            document.getElementById('modalEntityLabel').value = "هدف " + activeModalId.replace("ID", "");
+            document.getElementById('modalEntityLat').value = lat.toFixed(4);
+            document.getElementById('modalEntityLng').value = lng.toFixed(4);
+            modalOverlay.style.display = 'flex';
+        }
+
+        function editEntity(index) {
+            const item = registry[index];
+            if (!item) return;
+
+            editingIndex = index;
+            activeModalId = item.id;
+            document.getElementById('modalTitle').innerHTML = `✏️ ویرایش تجهیز [${item.id}]`;
+            document.getElementById('modalEntityIdDisplay').innerText = item.id;
+            document.getElementById('modalEntityType').value = item.type;
+            document.getElementById('modalEntityLabel').value = item.label;
+            document.getElementById('modalEntityLat').value = item.lat.toFixed(4);
+            document.getElementById('modalEntityLng').value = item.lng.toFixed(4);
+
+            modalOverlay.style.display = 'flex';
+        }
+
+        function closeModal() {
+            modalOverlay.style.display = 'none';
+        }
+
+        function confirmSaveEntity() {
+            const type = document.getElementById('modalEntityType').value;
+            const id = activeModalId;
+            const label = document.getElementById('modalEntityLabel').value.trim();
+            const lat = parseFloat(document.getElementById('modalEntityLat').value);
+            const lng = parseFloat(document.getElementById('modalEntityLng').value);
+
+            if (!label) { alert('لطفاً عنوان را وارد کنید.'); return; }
+            if (isNaN(lat) || isNaN(lng)) { alert('لطفاً مختصات معتبر وارد کنید.'); return; }
+
+            if (editingIndex !== null) {
+                updateEntityData(editingIndex, type, id, label, lat, lng);
+            } else {
+                addEntityToMap(type, id, label, lat, lng, true);
+            }
+
+            closeModal();
+        }
+
+        /* ================= حافظه و لود ================= */
+        function saveToLocalStorage() {
+            const exportData = registry.map(item => ({ type: item.type, id: item.id, label: item.label, lat: item.lat, lng: item.lng }));
+            localStorage.setItem('map_equipment_data', JSON.stringify(exportData));
+        }
+
+        function loadFromLocalStorage() {
+            const savedData = localStorage.getItem('map_equipment_data');
+            if (savedData) {
+                try {
+                    const parsed = JSON.parse(savedData);
+                    clearAllEntities();
+                    parsed.forEach(e => addEntityToMap(e.type, e.id, e.label, e.lat, e.lng, false));
+                } catch(err) { console.error(err); }
+            } else {
+                const initialEntities = [
+                   /* { type: "ship", id: "ID1", label: "کشتی آریا", lat: 26.1267, lng: 55.3227 },
+                    { type: "fighter", id: "ID2", label: "جنگنده F-14", lat: 26.6000, lng: 54.8000 },
+                    { type: "awacs", id: "ID3", label: "آواکس ۱", lat: 27.0000, lng: 56.0000 },
+                    { type: "radar", id: "ID4", label: "رادار کیش", lat: 26.5400, lng: 53.9800 },
+                    { type: "weather", id: "ID5", label: "ایستگاه هواشناسی", lat: 27.1107, lng: 57.3883 }*/
+                ];
+                initialEntities.forEach(e => addEntityToMap(e.type, e.id, e.label, e.lat, e.lng, false));
+            }
+        }
+
+        function exportJSON() {
+            const exportData = registry.map(item => ({ type: item.type, id: item.id, label: item.label, lat: item.lat, lng: item.lng }));
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `map_data_${new Date().toISOString().slice(0,10)}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function importJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (Array.isArray(importedData)) {
+                        clearAllEntities();
+                        importedData.forEach(item => addEntityToMap(item.type, item.id, item.label, item.lat, item.lng, false));
+                        saveToLocalStorage();
+                        alert('داده‌ها با موفقیت بارگذاری شدند.');
+                    }
+                } catch (err) { alert('فایل JSON معتبر نیست.'); }
+            };
+            reader.readAsText(file);
+        }
+
+        function clearAllEntities() {
+            registry.forEach(item => {
+                if (item.marker) map.removeLayer(item.marker);
+            });
+            registry = [];
+        }
+
+        /* ================= اندازه‌گیری ================= */
+        let isMeasuring = false;
+        let measureMarkers = [];
+        let measureSegments = [];
+        let polygonLayer = null;
+        let isClosedManually = false;
+
+        const measureBtn = document.getElementById('toggleMeasureBtn');
+        const statusText = document.getElementById('measureStatusText');
+        const totalDistSpan = document.getElementById('totalDistanceVal');
+        const totalAreaSpan = document.getElementById('totalAreaVal');
+
+        function toggleMeasureMode() {
+            isMeasuring = !isMeasuring;
+            if (isMeasuring) {
+                measureBtn.classList.add('active');
+                measureBtn.innerHTML = '<i class="fa-solid fa-ruler"></i> توقف اندازه‌گیری';
+                statusText.innerHTML = '<span style="color:#10b981; font-weight:bold;">فعال (کلیک کنید)</span>';
+                document.getElementById('map').classList.add('measuring-mode');
+            } else {
+                measureBtn.classList.remove('active');
+                measureBtn.innerHTML = '<i class="fa-solid fa-ruler"></i> اندازه‌گیری';
+                statusText.innerHTML = 'غیرفعال';
+                document.getElementById('map').classList.remove('measuring-mode');
+            }
+        }
+
+        map.on('click', function(e) {
+            if (isMeasuring) {
+                addMeasurementPoint(e.latlng);
+            } else {
+                openModalForClick(e.latlng.lat, e.latlng.lng);
+            }
+        });
+
+        function addMeasurementPoint(latlng) {
+            const marker = L.marker(latlng, {
+                draggable: true,
+                icon: L.divIcon({
+                    className: 'measure-dot',
+                    html: '<div style="width: 12px; height: 12px; background: #ffb703; border: 2px solid #000; border-radius: 50%;"></div>',
+                    iconSize: [14, 14], iconAnchor: [7, 7]
+                })
+            }).addTo(map);
+
+            measureMarkers.push(marker);
+            marker.on('drag', function() { updateMeasurements(); });
+            updateMeasurements();
+        }
+
+        window.forceClosePolygon = function() {
+            if (measureMarkers.length < 3) {
+                alert('برای بستن شکل، باید حداقل ۳ نقطه روی نقشه بگذارید.');
+                return;
+            }
+            isClosedManually = true;
+            updateMeasurements();
+        };
+
+        function calculatePolygonArea(latlngs) {
+            if (latlngs.length < 3) return 0;
+            const radius = 6378137;
+            let area = 0;
+            const len = latlngs.length;
+            for (let i = 0; i < len; i++) {
+                const p1 = latlngs[i];
+                const p2 = latlngs[(i + 1) % len];
+                const rad1 = p1.lat * (Math.PI / 180);
+                const rad2 = p2.lat * (Math.PI / 180);
+                const dLng = (p2.lng - p1.lng) * (Math.PI / 180);
+                area += dLng * (2 + Math.sin(rad1) + Math.sin(rad2));
+            }
+            return Math.abs((area * radius * radius) / 2);
+        }
+
+        function updateMeasurements() {
+            measureSegments.forEach(layer => map.removeLayer(layer));
+            measureSegments = [];
+            if (polygonLayer) { map.removeLayer(polygonLayer); polygonLayer = null; }
+
+            if (measureMarkers.length === 0) {
+                totalDistSpan.innerHTML = '۰ متر';
+                totalAreaSpan.innerHTML = '۰ متر مربع';
+                return;
+            }
+
+            let totalDistance = 0;
+            const points = measureMarkers.map(m => m.getLatLng());
+
+            for (let i = 0; i < points.length - 1; i++) {
+                const p1 = points[i];
+                const p2 = points[i + 1];
+                const polyline = L.polyline([p1, p2], { color: '#ffb703', weight: 3, dashArray: '6, 6' }).addTo(map);
+                measureSegments.push(polyline);
+
+                const dist = p1.distanceTo(p2);
+                totalDistance += dist;
+                const fmtDist = dist > 1000 ? (dist / 1000).toFixed(2) + ' کیلومتر' : Math.round(dist) + ' متر';
+                const midLat = (p1.lat + p2.lat) / 2;
+                const midLng = (p1.lng + p2.lng) / 2;
+
+                const label = L.tooltip({ permanent: true, direction: 'center', className: 'measure-label' })
+                    .setContent(fmtDist).setLatLng([midLat, midLng]).addTo(map);
+                measureSegments.push(label);
+            }
+
+            let isClosed = isClosedManually;
+            if (points.length >= 3 && !isClosed) {
+                if (points[0].distanceTo(points[points.length - 1]) < 1000) { isClosed = true; }
+            }
+
+            if (isClosed && points.length >= 3) {
+                const closingLine = L.polyline([points[points.length - 1], points[0]], { color: '#ffb703', weight: 3, dashArray: '6, 6' }).addTo(map);
+                measureSegments.push(closingLine);
+
+                polygonLayer = L.polygon(points, { color: '#ffb703', fillColor: '#ffb703', fillOpacity: 0.35, weight: 2 }).addTo(map);
+
+                const areaSqMeters = calculatePolygonArea(points);
+                let areaFormatted = areaSqMeters >= 1000000 
+                    ? (areaSqMeters / 1000000).toFixed(2) + ' کیلومتر مربع (km²)' 
+                    : Math.round(areaSqMeters).toLocaleString('fa-IR') + ' متر مربع (m²)';
+
+                totalAreaSpan.innerHTML = `<span style="color: #059669; font-weight: bold;">${areaFormatted}</span>`;
+            } else {
+                totalAreaSpan.innerHTML = '۰ متر مربع (چندضلعی باز)';
+            }
+
+            totalDistSpan.innerHTML = totalDistance > 1000 ? (totalDistance / 1000).toFixed(2) + ' کیلومتر' : Math.round(totalDistance) + ' متر';
+        }
+
+        window.clearMeasurements = function() {
+            measureMarkers.forEach(m => map.removeLayer(m));
+            measureMarkers = [];
+            measureSegments.forEach(l => map.removeLayer(l));
+            measureSegments = [];
+            if (polygonLayer) { map.removeLayer(polygonLayer); polygonLayer = null; }
+            isClosedManually = false;
+            totalDistSpan.innerHTML = '۰ متر';
+            totalAreaSpan.innerHTML = '۰ متر مربع';
+        };
+
+        /* ================= تجهیزات و مارکرها ================= */
+        const typeConfig = {
+            ship:    { icon: 'fa-solid fa-ship', className: 'bg-ship', title: 'کشتی' },
+            plane:   { icon: 'fa-solid fa-plane', className: 'bg-plane', title: 'هواپیما' },
+            fighter: { icon: 'fa-solid fa-plane-up', className: 'bg-fighter', title: 'جنگنده' },
+            awacs:   { icon: 'fa-solid fa-tower-broadcast', className: 'bg-awacs', title: 'آواکس' },
+            boat:    { icon: 'fa-solid fa-sailboat', className: 'bg-boat', title: 'قایق' },
+            radar:   { icon: 'fa-solid fa-satellite-dish', className: 'bg-radar', title: 'رادار' },
+            train:   { icon: 'fa-solid fa-train', className: 'bg-train', title: 'قطار' },
+            car:     { icon: 'fa-solid fa-car', className: 'bg-car', title: 'ماشین' },
+            truck:   { icon: 'fa-solid fa-truck-front', className: 'bg-truck', title: 'کامیون' },
+            weather: { icon: 'fa-solid fa-cloud-sun', className: 'bg-weather', title: 'ایستگاه هواشناسی' },
+            house:   { icon: 'fa-solid fa-house', className: 'bg-house', title: 'خانه' },
+            default: { icon: 'fa-solid fa-location-dot', className: 'bg-default', title: 'مارکر معمولی' }
+        };
+
+        let registry = [];
+
+        function initTypeCheckboxes() {
+            const container = document.getElementById('typeCheckboxes');
+            container.innerHTML = '';
+            for (const [key, conf] of Object.entries(typeConfig)) {
+                const label = document.createElement('label');
+                label.innerHTML = `<input type="checkbox" value="${key}" checked onchange="applyFilters()"> <i class="${conf.icon}"></i> ${conf.title}`;
+                container.appendChild(label);
+            }
+        }
+
+        window.toggleAllTypes = function(status) {
+            const checkboxes = document.querySelectorAll('#typeCheckboxes input[type="checkbox"]');
+            checkboxes.forEach(cb => cb.checked = status);
+            applyFilters();
+        };
+
+        window.applyFilters = function() {
+            const searchText = document.getElementById('filterText').value.toLowerCase().trim();
+            const selectedTypes = Array.from(document.querySelectorAll('#typeCheckboxes input[type="checkbox"]:checked')).map(cb => cb.value);
+
+            registry.forEach(item => {
+                const matchText = item.label.toLowerCase().includes(searchText) || item.id.toLowerCase().includes(searchText);
+                const matchType = selectedTypes.includes(item.type);
+
+                item.visible = (matchText && matchType);
+
+                if (item.visible) {
+                    if (!map.hasLayer(item.marker)) item.marker.addTo(map);
+                } else {
+                    if (map.hasLayer(item.marker)) map.removeLayer(item.marker);
+                }
+            });
+            renderList(searchText, selectedTypes);
+        };
+
+        // 🌟 تابع حذف بر اساس فیلترهای فعال
+        window.clearFilteredEntities = function() {
+            const searchText = document.getElementById('filterText').value.toLowerCase().trim();
+            const selectedTypes = Array.from(document.querySelectorAll('#typeCheckboxes input[type="checkbox"]:checked')).map(cb => cb.value);
+
+            const toRemove = registry.filter(item => {
+                const matchText = item.label.toLowerCase().includes(searchText) || item.id.toLowerCase().includes(searchText);
+                const matchType = selectedTypes.includes(item.type);
+                return matchText && matchType;
+            });
+
+            if (toRemove.length === 0) {
+                alert('هیچ آیتمی با شرایط فیلتر فعلی یافت نشد.');
+                return;
+            }
+
+            if (confirm(`آیا از حذف ${toRemove.length} آیتمِ فیلترشده مطمئن هستید؟`)) {
+                toRemove.forEach(item => {
+                    if (map.hasLayer(item.marker)) map.removeLayer(item.marker);
+                });
+                // فقط آیتم‌هایی که فیلتر نبودند را نگه می‌داریم
+                registry = registry.filter(item => {
+                    const matchText = item.label.toLowerCase().includes(searchText) || item.id.toLowerCase().includes(searchText);
+                    const matchType = selectedTypes.includes(item.type);
+                    return !(matchText && matchType);
+                });
+                applyFilters();
+                saveToLocalStorage();
+            }
+        };
+
+        function renderList(searchText = "", selectedTypes = []) {
+            const container = document.getElementById('entity-list');
+            container.innerHTML = '';
+
+            registry.forEach((item, index) => {
+                const matchText = item.label.toLowerCase().includes(searchText) || item.id.toLowerCase().includes(searchText);
+                const matchType = selectedTypes.includes(item.type);
+
+                if (matchText && matchType) {
+                    const conf = typeConfig[item.type] || typeConfig.default;
+                    const elem = document.createElement('div');
+                    elem.className = 'entity-item';
+                    elem.innerHTML = `
+                        <span><i class="${conf.icon}" style="margin-left: 4px;"></i> <b>[${item.id}]</b> ${item.label}</span>
+                        <div class="item-actions">
+                            <button class="edit-btn" onclick="editEntity(${index})">✏️</button>
+                            <button class="delete-btn" onclick="removeEntity(${index})">🗑️</button>
+                        </div>
+                    `;
+                    container.appendChild(elem);
+                }
+            });
+        }
+
+        function createMarkerPopup(index, item, conf) {
+            return `
+                <div style="direction: rtl; text-align: right; padding: 4px;">
+                    <b style="color: #0077b6; font-size: 14px;"><i class="${conf.icon}"></i> ${item.label} (${item.id})</b><br>
+                    <span style="font-size: 11px; color: #666;">نوع: ${conf.title}</span>
+                    <hr style="border: 0; border-top: 1px solid #ddd; margin: 6px 0;">
+                    <b>عرض جغرافیایی:</b> ${item.lat.toFixed(4)}<br>
+                    <b>طول جغرافیایی:</b> ${item.lng.toFixed(4)}
+                    <hr style="border: 0; border-top: 1px solid #ddd; margin: 6px 0;">
+                    <button class="edit-btn" onclick="editEntity(${index})" style="width:100%; padding: 4px; font-weight:bold;">✏️ ویرایش مشخصات</button>
+                </div>
+            `;
+        }
+
+        function addEntityToMap(type, id, label, lat, lng, autoSave = true) {
+            const conf = typeConfig[type] || typeConfig.default;
+            const icon = L.divIcon({
+                html: `<i class="${conf.icon}"></i>`,
+                className: `custom-marker ${conf.className}`,
+                iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -19]
+            });
+
+            const marker = L.marker([lat, lng], { icon: icon, draggable: isDragEnabled }).addTo(map);
+            const displayText = `[${id}] ${label}`;
+
+            marker.bindTooltip(displayText, {
+                permanent: true, direction: 'bottom', className: 'marker-label', offset: [0, 0]
+            });
+
+            const index = registry.length;
+            const itemObj = { type, id, label, lat, lng, marker, visible: true };
+            marker.bindPopup(createMarkerPopup(index, itemObj, conf));
+
+            marker.on('dragend', function(e) {
+                const newPos = e.target.getLatLng();
+                itemObj.lat = newPos.lat;
+                itemObj.lng = newPos.lng;
+                marker.setPopupContent(createMarkerPopup(registry.indexOf(itemObj), itemObj, conf));
+                saveToLocalStorage();
+            });
+
+            registry.push(itemObj);
+            applyFilters();
+            if (autoSave) saveToLocalStorage();
+        }
+
+        function updateEntityData(index, type, id, label, lat, lng) {
+            const item = registry[index];
+            if (!item) return;
+
+            item.type = type;
+            item.id = id;
+            item.label = label;
+            item.lat = lat;
+            item.lng = lng;
+
+            const conf = typeConfig[type] || typeConfig.default;
+            const icon = L.divIcon({
+                html: `<i class="${conf.icon}"></i>`,
+                className: `custom-marker ${conf.className}`,
+                iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -19]
+            });
+
+            item.marker.setIcon(icon);
+            item.marker.setLatLng([lat, lng]);
+            item.marker.setTooltipContent(`[${id}] ${label}`);
+            item.marker.setPopupContent(createMarkerPopup(index, item, conf));
+
+            applyFilters();
+            saveToLocalStorage();
+        }
+
+        window.removeEntity = function(index) {
+            const item = registry[index];
+            if (item) {
+                map.removeLayer(item.marker);
+                registry.splice(index, 1);
+                applyFilters();
+                saveToLocalStorage();
+            }
+        };
+
+        initTypeCheckboxes();
+        loadFromLocalStorage();
+    </script>
+</body>
+</html>
